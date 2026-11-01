@@ -17,7 +17,7 @@ COPY src ./src
 RUN cargo build --release --locked --bin geoip-rust-service
 
 FROM alpine:3.23
-ENV PORT=8080 DB_PATH=/data/GeoLite2-City.mmdb
+ENV PORT=8080 DB_PATH=/data/GeoLite2-City.mmdb ASN_DB_PATH=/data/GeoLite2-ASN.mmdb
 WORKDIR /app
 COPY --from=builder /build/target/release/geoip-rust-service /usr/local/bin/geoip-rust-service
 USER 10001:10001

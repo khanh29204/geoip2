@@ -9,12 +9,18 @@ use tower::ServiceExt;
 
 use geoip_rust_service::{db::GeoDb, handlers};
 
+fn fixture(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
+}
+
 async fn get(uri: &str) -> (StatusCode, Value) {
-    let db = GeoDb::open(PathBuf::from(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/GeoIP2-City-Test.mmdb"
-    )))
-    .expect("open test database");
+    let db = GeoDb::open(
+        fixture("GeoIP2-City-Test.mmdb"),
+        fixture("GeoLite2-ASN-Test.mmdb"),
+    )
+    .expect("open test databases");
     let response = handlers::router(Arc::new(db))
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
         .await
@@ -33,7 +39,7 @@ async fn health_is_public_and_returns_ok() {
 }
 
 #[tokio::test]
-async fn city_record_has_the_exact_json_fields_and_official_values() {
+async fn overlapping_city_and_asn_records_are_merged_in_http_response() {
     let (status, body) = get("/json/89.160.20.128").await;
 
     assert_eq!(status, StatusCode::OK);
@@ -56,6 +62,8 @@ async fn city_record_has_the_exact_json_fields_and_official_values() {
             "time_zone",
             "latitude",
             "longitude",
+            "asn",
+            "asn_organization",
         ]
         .into_iter()
         .collect()
@@ -70,6 +78,32 @@ async fn city_record_has_the_exact_json_fields_and_official_values() {
     assert_eq!(body["time_zone"], "Europe/Stockholm");
     assert_eq!(body["latitude"], 58.4167);
     assert_eq!(body["longitude"], 15.6167);
+    assert_eq!(body["asn"], 29518);
+    assert_eq!(body["asn_organization"], "Bredband2 AB");
+}
+
+#[tokio::test]
+async fn asn_only_record_returns_success_with_null_city_fields() {
+    let (status, body) = get("/json/1.0.0.1").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body,
+        json!({
+            "ip": "1.0.0.1",
+            "country_code": null,
+            "country_name": null,
+            "region_code": null,
+            "region_name": null,
+            "city": null,
+            "zip_code": null,
+            "time_zone": null,
+            "latitude": null,
+            "longitude": null,
+            "asn": 15169,
+            "asn_organization": "Google Inc."
+        })
+    );
 }
 
 #[tokio::test]
@@ -114,19 +148,21 @@ async fn known_ipv6_address_uses_the_same_lookup_route() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["ip"], "2001:218::");
     assert_eq!(body["country_code"], "JP");
+    assert!(body["asn"].is_null());
+    assert!(body["asn_organization"].is_null());
 }
 
 #[tokio::test]
 async fn invalid_database_lookup_returns_non_sensitive_500() {
-    let db = GeoDb::open(PathBuf::from(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/GeoIP2-City-Test-Broken-Double-Format.mmdb"
-    )))
-    .expect("open broken test database");
+    let db = GeoDb::open(
+        fixture("GeoIP2-City-Test-Broken-Double-Format.mmdb"),
+        fixture("GeoLite2-ASN-Test.mmdb"),
+    )
+    .expect("open test databases");
     let response = handlers::router(Arc::new(db))
         .oneshot(
             Request::builder()
-                .uri("/json/89.160.20.128")
+                .uri("/json/2001:220::")
                 .body(Body::empty())
                 .unwrap(),
         )

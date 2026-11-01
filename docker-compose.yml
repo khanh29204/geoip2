@@ -22,6 +22,7 @@ services:
     image: ghcr.io/khanh29204/geoip2:latest
     environment:
       DB_PATH: /data/GeoLite2-City.mmdb
+      ASN_DB_PATH: /data/GeoLite2-ASN.mmdb
       PORT: "8080"
     volumes:
       - type: bind

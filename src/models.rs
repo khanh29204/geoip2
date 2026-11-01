@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 pub struct GeoIpResponse {
     pub ip: String,
     pub country_code: Option<String>,
@@ -12,4 +12,6 @@ pub struct GeoIpResponse {
     pub time_zone: Option<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub asn: Option<u32>,
+    pub asn_organization: Option<String>,
 }

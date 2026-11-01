@@ -25,20 +25,20 @@ Chạy image từ GHCR (cần image đã được publish và package đặt pub
 docker compose --env-file /dev/null up -d --no-build --pull always
 ```
 
-`geoip-updater` tải/cập nhật DB mỗi 168 giờ vào `geoip-data/`; API gắn thư mục đó chỉ đọc tại `/data`, với `DB_PATH=/data/GeoLite2-City.mmdb`. Compose chỉ đợi updater bắt đầu, không đợi lần tải DB đầu tiên hoàn tất. API chờ DB ban đầu và kiểm tra lại mỗi 5 giây; khi đang chạy, API cũng kiểm tra DB mỗi 5 giây. Nếu nạp DB mới thất bại, API giữ reader hiện tại và tiếp tục phục vụ bằng DB cũ.
+`geoip-updater` tải/cập nhật DB mỗi 168 giờ vào `geoip-data/`; API gắn thư mục đó chỉ đọc tại `/data`, với `DB_PATH=/data/GeoLite2-City.mmdb` và `ASN_DB_PATH=/data/GeoLite2-ASN.mmdb`. Compose chỉ đợi updater bắt đầu, không đợi lần tải DB đầu tiên hoàn tất. API chờ cả hai DB ban đầu và kiểm tra độc lập mỗi DB mỗi 5 giây. Cần có cả GeoLite2-City và GeoLite2-ASN trước khi API khởi động; nếu dùng `GeoIP.conf` đã có, tự thêm `GeoLite2-ASN` vào `EditionIDs` (API sẽ tiếp tục chờ nếu thiếu file ASN). Mỗi DB được thay reader độc lập sau khi tải/nạp thành công; lỗi nạp giữ reader cũ của DB đó, DB còn lại vẫn có thể cập nhật. Hai DB không được đảm bảo cùng một phiên bản phát hành.
 
 ## Cấu hình và hành vi
 
-- `PORT` chọn cổng API (mặc định `8080`); `DB_PATH` phải là đường dẫn tới file DB đầy đủ (mặc định `/data/GeoLite2-City.mmdb`). Đặt lại các biến này nếu chạy ngoài Compose.
+- `PORT` chọn cổng API (mặc định `8080`); `DB_PATH` và `ASN_DB_PATH` phải là đường dẫn tới file DB đầy đủ (mặc định lần lượt `/data/GeoLite2-City.mmdb` và `/data/GeoLite2-ASN.mmdb`). Đặt lại các biến này nếu chạy ngoài Compose.
 - `GET /health` là health check. API hỗ trợ IPv4/IPv6; trường không có dữ liệu trả về `null`.
-- Tra cứu IP: `GET /json/{ip}` và `GET /api/v1/geoip/{ip}` (bí danh). IP sai định dạng trả `400`; IP hợp lệ nhưng không có trong DB trả `404`; lỗi đọc/tra cứu DB nội bộ trả `500`.
+- Tra cứu IP: `GET /json/{ip}` và `GET /api/v1/geoip/{ip}` (bí danh). JSON bổ sung `asn` (số nguyên nullable) và `asn_organization` (chuỗi nullable); backend ánh xạ `as` thành `AS<asn>` và `org` thành `asn_organization`, còn `isp` không được suy ra từ ASN. IP sai định dạng trả `400`; trả `200` nếu có bản ghi ở một trong hai DB, `404` nếu cả hai đều không có, và `500` khi lỗi giải mã/hệ thống.
 - Cập nhật DB phải dùng file tạm đã tải và xác thực rồi thay bằng atomic rename; không ghi đè file tại chỗ vì API dùng mmap.
 - Kết quả GeoLite (ví dụ `1.1.1.1`) có thể thay đổi và fixture kiểm thử không đại diện cho độ chính xác production. RAM dưới 20 MB không được đảm bảo vì mmap có thể đưa các trang DB vào RAM; độ trễ mạng cũng không bằng không.
 - API không có xác thực. Docker chỉ publish trên loopback host theo cấu hình mặc định; nếu đổi địa chỉ publish để truy cập từ mạng, hãy đặt sau reverse proxy có xác thực và giới hạn truy cập.
 
 ## Tra cứu
 
-Các lệnh dưới đây gọi DB production GeoLite2 City được Compose cập nhật. Kết quả cho `1.1.1.1` phụ thuộc phiên bản DB:
+Các lệnh dưới đây gọi DB production GeoLite2 City và ASN được Compose cập nhật. Kết quả cho `1.1.1.1` phụ thuộc phiên bản DB:
 
 ```sh
 curl -i http://127.0.0.1:8080/json/1.1.1.1

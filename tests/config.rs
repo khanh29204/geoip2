@@ -4,10 +4,25 @@ use geoip_rust_service::{config::Config, models::GeoIpResponse};
 
 #[test]
 fn defaults_to_city_database_and_port_8080() {
-    let config = Config::parse(None, None).expect("defaults should be valid");
+    let config = Config::parse(None, None, None).expect("defaults should be valid");
 
     assert_eq!(config.db_path, PathBuf::from("/data/GeoLite2-City.mmdb"));
+    assert_eq!(config.asn_db_path, PathBuf::from("/data/GeoLite2-ASN.mmdb"));
     assert_eq!(config.port, 8080);
+}
+
+#[test]
+fn accepts_custom_city_and_asn_paths_and_port() {
+    let config = Config::parse(
+        Some("/custom/city.mmdb".into()),
+        Some("9000".into()),
+        Some("/custom/asn.mmdb".into()),
+    )
+    .expect("custom settings should be valid");
+
+    assert_eq!(config.db_path, PathBuf::from("/custom/city.mmdb"));
+    assert_eq!(config.asn_db_path, PathBuf::from("/custom/asn.mmdb"));
+    assert_eq!(config.port, 9000);
 }
 
 #[test]
@@ -23,6 +38,8 @@ fn serializes_missing_response_fields_as_null() {
         time_zone: None,
         latitude: None,
         longitude: None,
+        asn: None,
+        asn_organization: None,
     };
     let value = serde_json::to_value(response).expect("response should serialize");
 
@@ -37,6 +54,8 @@ fn serializes_missing_response_fields_as_null() {
         "time_zone",
         "latitude",
         "longitude",
+        "asn",
+        "asn_organization",
     ] {
         assert!(value[field].is_null(), "{field} should serialize as null");
     }
@@ -44,14 +63,21 @@ fn serializes_missing_response_fields_as_null() {
 
 #[test]
 fn rejects_a_non_numeric_port() {
-    let result = Config::parse(None, Some("not-a-port".into()));
+    let result = Config::parse(None, Some("not-a-port".into()), None);
 
     assert!(result.is_err());
 }
 
 #[test]
 fn rejects_an_empty_database_path() {
-    let result = Config::parse(Some("".into()), None);
+    let result = Config::parse(Some("".into()), None, None);
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn rejects_an_empty_asn_database_path() {
+    let result = Config::parse(None, None, Some("".into()));
 
     assert!(result.is_err());
 }
@@ -61,7 +87,7 @@ fn rejects_an_empty_database_path() {
 fn rejects_a_non_unicode_port() {
     use std::os::unix::ffi::OsStringExt;
 
-    let result = Config::parse(None, Some(std::ffi::OsString::from_vec(vec![0xff])));
+    let result = Config::parse(None, Some(std::ffi::OsString::from_vec(vec![0xff])), None);
 
     assert!(result.is_err());
 }

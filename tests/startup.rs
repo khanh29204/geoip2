@@ -95,10 +95,13 @@ fn stop(service: &mut Service) -> ExitStatus {
 fn waits_for_database_install_and_serves_health_then_stops_on_sigterm() {
     let scratch = ScratchDir::new();
     let database = scratch.0.join("GeoIP2-City-Test.mmdb");
+    let asn_database = scratch.0.join("GeoLite2-ASN-Test.mmdb");
+    install_fixture("GeoIP2-City-Test.mmdb", &database, &scratch.0);
     let port = free_port();
     let mut service = Service(
         Command::new(env!("CARGO_BIN_EXE_geoip-rust-service"))
             .env("DB_PATH", &database)
+            .env("ASN_DB_PATH", &asn_database)
             .env("PORT", port.to_string())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -106,20 +109,18 @@ fn waits_for_database_install_and_serves_health_then_stops_on_sigterm() {
             .expect("service binary should start"),
     );
 
-    // The missing file must be observed before it is atomically installed.
+    // City is available, but startup must still wait for the ASN database.
     thread::sleep(Duration::from_millis(500));
     assert!(service
         .0
         .try_wait()
         .expect("child status should be readable")
         .is_none());
-    let staged = scratch.0.join("GeoIP2-City-Test.mmdb.new");
-    fs::copy(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/GeoIP2-City-Test.mmdb"),
-        &staged,
-    )
-    .expect("fixture should be copied");
-    fs::rename(staged, &database).expect("database should be atomically installed");
+    assert!(
+        http_status(port).is_none(),
+        "service started without ASN data"
+    );
+    install_fixture("GeoLite2-ASN-Test.mmdb", &asn_database, &scratch.0);
 
     let deadline = Instant::now() + Duration::from_secs(10);
     let status = loop {
@@ -155,6 +156,7 @@ fn sigterm_stops_promptly_while_database_is_missing() {
     let mut service = Service(
         Command::new(env!("CARGO_BIN_EXE_geoip-rust-service"))
             .env("DB_PATH", scratch.0.join("missing.mmdb"))
+            .env("ASN_DB_PATH", scratch.0.join("missing-asn.mmdb"))
             .env("PORT", "0")
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -185,9 +187,22 @@ fn invalid_port_exits_nonzero_without_waiting_for_database() {
     let scratch = ScratchDir::new();
     let output = Command::new(env!("CARGO_BIN_EXE_geoip-rust-service"))
         .env("DB_PATH", scratch.0.join("missing.mmdb"))
+        .env("ASN_DB_PATH", scratch.0.join("missing-asn.mmdb"))
         .env("PORT", "not-a-port")
         .output()
         .expect("service binary should start");
 
     assert!(!output.status.success(), "invalid PORT should fail startup");
+}
+
+fn install_fixture(name: &str, target: &PathBuf, scratch: &std::path::Path) {
+    let staged = scratch.join(format!("{name}.new"));
+    fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures")
+            .join(name),
+        &staged,
+    )
+    .expect("fixture should be copied");
+    fs::rename(staged, target).expect("database should be atomically installed");
 }

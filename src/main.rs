@@ -14,12 +14,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut shutdown = Box::pin(shutdown_signal());
 
     let db = loop {
-        let path = config.db_path.clone();
-        match tokio::task::spawn_blocking(move || GeoDb::open(path)).await? {
+        let city_path = config.db_path.clone();
+        let asn_path = config.asn_db_path.clone();
+        match tokio::task::spawn_blocking(move || GeoDb::open(city_path, asn_path)).await? {
             Ok(db) => break Arc::new(db),
             Err(error) if is_not_found(error.as_ref()) => {
                 tracing::warn!(
-                    path = %config.db_path.display(),
+                    city_path = %config.db_path.display(),
+                    asn_path = %config.asn_db_path.display(),
                     error = %error,
                     "GeoIP database is missing; retrying in 5 seconds"
                 );
@@ -33,9 +35,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }
             Err(error) => {
                 tracing::error!(
-                    path = %config.db_path.display(),
+                    city_path = %config.db_path.display(),
+                    asn_path = %config.asn_db_path.display(),
                     error = %error,
-                    "failed to open GeoIP database"
+                    "failed to open GeoIP databases"
                 );
                 return Err(error);
             }
@@ -56,7 +59,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     Ok(Ok(true)) => tracing::info!("GeoIP database reloaded"),
                     Ok(Ok(false)) => {}
                     Ok(Err(error)) => {
-                        tracing::warn!(error = %error, "GeoIP database reload failed; keeping the current database")
+                        tracing::warn!(error = %error, "GeoIP database reload failed; failed readers retained, other databases may have updated")
                     }
                     Err(error) => {
                         tracing::warn!(error = %error, "GeoIP database reload task failed")
