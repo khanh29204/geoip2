@@ -1,0 +1,13 @@
+.git
+.env*
+GeoIP.conf
+geoip-data/
+target/
+tests/
+**/tests/
+test/
+**/test/
+testdata/
+**/testdata/
+fixtures/
+**/fixtures/

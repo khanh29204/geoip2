@@ -1,0 +1,4 @@
+.env*
+GeoIP.conf
+geoip-data/
+target/

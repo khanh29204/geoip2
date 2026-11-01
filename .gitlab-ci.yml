@@ -1,0 +1,28 @@
+stages:
+  - build
+
+build-image:
+  stage: build
+  image: docker:29.9.2-cli
+  services:
+    - name: docker:29.9.2-dind
+      alias: docker
+  variables:
+    DOCKER_TLS_CERTDIR: /certs
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: /certs/client
+  resource_group: docker-build-cache
+  before_script:
+    - printf '%s' "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin
+    - docker run --privileged --rm tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 --install arm64,amd64
+    - docker buildx create --driver docker-container --name ci-builder --use
+  script:
+    - >-
+      docker buildx build --push
+      --platform linux/amd64,linux/arm64
+      --tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
+      --cache-from "type=registry,ref=$CI_REGISTRY_IMAGE:buildcache"
+      --cache-to "type=registry,ref=$CI_REGISTRY_IMAGE:buildcache,mode=max" .
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'

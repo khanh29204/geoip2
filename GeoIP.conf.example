@@ -1,0 +1,5 @@
+# Copy to GeoIP.conf and fill in your MaxMind account credentials locally.
+AccountID YOUR_ACCOUNT_ID
+LicenseKey YOUR_LICENSE_KEY
+EditionIDs GeoLite2-City
+DatabaseDirectory /usr/share/GeoIP

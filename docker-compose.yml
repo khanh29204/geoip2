@@ -1,0 +1,36 @@
+services:
+  geoip-updater:
+    image: maxmindinc/geoipupdate:latest
+    environment:
+      GEOIPUPDATE_FREQUENCY: "168"
+      GEOIPUPDATE_CONF_FILE: /etc/GeoIP.conf
+      GEOIPUPDATE_DB_DIR: /usr/share/GeoIP
+    volumes:
+      - type: bind
+        source: ./GeoIP.conf
+        target: /etc/GeoIP.conf
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./geoip-data
+        target: /usr/share/GeoIP
+    restart: unless-stopped
+
+  geoip-api:
+    build: .
+    image: ghcr.io/khanh29204/geoip2:latest
+    environment:
+      DB_PATH: /data/GeoLite2-City.mmdb
+      PORT: "8080"
+    volumes:
+      - type: bind
+        source: ./geoip-data
+        target: /data
+        read_only: true
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+    depends_on:
+      geoip-updater:
+        condition: service_started
